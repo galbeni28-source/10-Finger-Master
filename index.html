@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10-Finger Tipp-Akademie Pro</title>
+<style>
+  :root { 
+    --primary: #3498db; --secondary: #2c3e50; --bg: #f4f7f6;
+    --f1: #ff7675; --f2: #fab1a0; --f3: #ffeaa7; --f4: #55efc4; 
+    --f5: #81ecec; --f6: #74b9ff; --f7: #a29bfe; --f8: #fd79a8;
+  }
+  body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 10px; text-align: center; }
+  .container { max-width: 1050px; margin: auto; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+  
+  .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+  .tab-btn { padding: 10px 20px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; background: #e0e0e0; }
+  .tab-btn.active { background: var(--primary); color: white; }
+
+  #display { 
+    background: #1e1e1e; color: #fff; padding: 25px; border-radius: 15px; font-size: 24px;
+    font-family: 'Courier New', monospace; height: 200px; line-height: 1.6; margin-bottom: 20px;
+    border: 3px solid #333; overflow-y: auto; text-align: left; white-space: pre-wrap; scroll-behavior: smooth;
+  }
+  .char.current { border-bottom: 4px solid var(--primary); background: #333; color: var(--primary); }
+  .char.correct { color: #2ecc71; }
+  .char.incorrect { color: #e74c3c; background: rgba(231, 76, 60, 0.3); }
+
+  /* FINGER-ANWEISUNG DIREKT ÜBER TASTATUR */
+  #finger-hint {
+    font-size: 1.2rem; font-weight: bold; padding: 10px;
+    background: #2d3436; border-radius: 10px 10px 0 0; color: white;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    max-width: fit-content; margin: 0 auto; border-bottom: 1px solid #444;
+  }
+  .finger-dot { width: 16px; height: 16px; border-radius: 50%; display: inline-block; }
+
+  .keyboard-area { display: inline-block; margin-top: 10px; }
+  .keyboard { background: #2d3436; padding: 15px; border-radius: 0 0 15px 15px; }
+  .row { display: flex; justify-content: center; gap: 4px; margin-bottom: 4px; }
+  .key { width: 42px; height: 42px; background: white; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; border-bottom: 3px solid #bdc3c7; color: #333; }
+  .key.active { transform: translateY(2px); border-bottom: none; background: var(--primary) !important; color: white; box-shadow: 0 0 10px var(--primary); }
+  
+  #input-trigger { position: absolute; opacity: 0; }
+  .stats { font-weight: bold; color: var(--secondary); margin-top: 10px; font-size: 0.9rem; }
+</style>
+</head>
+<body onclick="document.getElementById('input-trigger').focus()">
+
+<div class="container">
+  <h2>10-Finger Tipp-Akademie Pro</h2>
+  
+  <div class="tabs">
+    <button class="tab-btn active" id="tabTrainer" onclick="setMode('trainer')">Übungs-Trainer</button>
+    <button class="tab-btn" id="tabLearn" onclick="setMode('learn')">Lern-Modus (Finger-Hilfe)</button>
+  </div>
+
+  <div style="margin-bottom: 15px; display: flex; justify-content: center; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <select id="selLang" onchange="initGame()">
+      <option value="de">Deutsch</option>
+      <option value="en">Englisch</option>
+      <option value="ru">Russisch</option>
+      <option value="hu">Ungarisch</option>
+      <option value="es">Spanisch</option>
+      <option value="pt">Portugiesisch</option>
+      <option value="fi">Finnisch</option>
+      <option value="da">Dänisch</option>
+      <option value="no">Norwegisch</option>
+      <option value="fr">Französisch</option>
+    </select>
+    <span>Länge:</span>
+    <select id="selLength" onchange="initGame()">
+      <option value="100">100 Wörter</option>
+      <option value="500">500 Wörter</option>
+      <option value="1000">1000 Wörter</option>
+      <option value="2000" selected>2000 Wörter</option>
+    </select>
+    <button onclick="initGame()" style="cursor:pointer; padding: 5px 15px; border-radius: 5px; border: 1px solid #ccc;">Neustart</button>
+  </div>
+
+  <div id="display"></div>
+  <input type="text" id="input-trigger" autocomplete="off">
+
+  <div class="keyboard-area">
+    <div id="finger-hint"><span class="finger-dot"></span> Bereit?</div>
+    <div class="keyboard" id="kb"></div>
+  </div>
+  
+  <div class="stats" id="stats">Fortschritt: 0%</div>
+</div>
+
+<script>
+const words = {
+  de: ["Haus", "Garten", "Schule", "Lernen", "Tastatur", "Computer", "Mensch", "Arbeit", "Leben", "Zeit"],
+  en: ["house", "garden", "school", "learning", "keyboard", "computer", "people", "work", "life", "time"],
+  ru: ["дом", "сад", "школа", "учеба", "клавиатура", "компьютер", "человек", "работа", "жизнь", "время"],
+  hu: ["ház", "kert", "iskola", "tanulás", "billentyűzet", "számítógép", "ember", "munka", "élet", "idő"],
+  es: ["casa", "jardín", "escuela", "aprender", "teclado", "computadora", "persona", "trabajo", "vida", "tiempo"],
+  pt: ["casa", "jardim", "escola", "aprender", "teclado", "computador", "pessoa", "trabalho", "vida", "tempo"],
+  fi: ["talo", "puutarha", "koulu", "oppiminen", "näppäimistö", "tietokone", "ihminen", "työ", "elämä", "aika"],
+  da: ["hus", "have", "skole", "læring", "tastatur", "computer", "menneske", "arbejde", "liv", "tid"],
+  no: ["hus", "hage", "skole", "læring", "tastatur", "datamaskin", "menneske", "arbeid", "liv", "tid"],
+  fr: ["maison", "jardin", "école", "apprendre", "clavier", "ordinateur", "personne", "travail", "vie", "temps"]
+};
+
+const fingerInfo = {
+  "1":"Linker Kleiner Finger","Q":"Linker Kleiner Finger","A":"Linker Kleiner Finger","Y":"Linker Kleiner Finger","Z":"Linker Kleiner Finger",
+  "2":"Linker Ringfinger","W":"Linker Ringfinger","S":"Linker Ringfinger","X":"Linker Ringfinger",
+  "3":"Linker Mittelfinger","E":"Linker Mittelfinger","D":"Linker Mittelfinger","C":"Linker Mittelfinger",
+  "4":"Linker Zeigefinger","R":"Linker Zeigefinger","F":"Linker Zeigefinger","V":"Linker Zeigefinger","5":"Linker Zeigefinger","T":"Linker Zeigefinger","G":"Linker Zeigefinger","B":"Linker Zeigefinger",
+  "6":"Rechter Zeigefinger","7":"Rechter Zeigefinger","U":"Rechter Zeigefinger","J":"Rechter Zeigefinger","M":"Rechter Zeigefinger","H":"Rechter Zeigefinger","N":"Rechter Zeigefinger",
+  "8":"Rechter Mittelfinger","I":"Rechter Mittelfinger","K":"Rechter Mittelfinger",",":"Rechter Mittelfinger",
+  "9":"Rechter Ringfinger","O":"Rechter Ringfinger","L":"Rechter Ringfinger",".":"Rechter Ringfinger",
+  "0":"Rechter Kleiner Finger","P":"Rechter Kleiner Finger","Ö":"Rechter Kleiner Finger","Ä":"Rechter Kleiner Finger","Ü":"Rechter Kleiner Finger","ß":"Rechter Kleiner Finger",
+  " ":"Daumen (Leertaste)"
+};
+
+const fingerColorMap = {
+  "Linker Kleiner Finger": "var(--f1)", "Linker Ringfinger": "var(--f2)", "Linker Mittelfinger": "var(--f3)", "Linker Zeigefinger": "var(--f4)",
+  "Rechter Zeigefinger": "var(--f5)", "Rechter Mittelfinger": "var(--f6)", "Rechter Ringfinger": "var(--f7)", "Rechter Kleiner Finger": "var(--f8)",
+  "Daumen (Leertaste)": "#bdc3c7"
+};
+
+const layout = [
+  ["1","2","3","4","5","6","7","8","9","0","ß"],
+  ["Q","W","E","R","T","Z","U","I","O","P","Ü"],
+  ["A","S","D","F","G","H","J","K","L","Ö","Ä"],
+  ["Y","X","C","V","B","N","M",",",".","-"]
+];
+
+let currentText = "", idx = 0, currentMode = 'trainer';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('tabTrainer').classList.toggle('active', mode === 'trainer');
+  document.getElementById('tabLearn').classList.toggle('active', mode === 'learn');
+  initGame();
+}
+
+function initGame() {
+  const lang = document.getElementById('selLang').value;
+  const count = parseInt(document.getElementById('selLength').value);
+  currentText = "";
+  const pool = words[lang] || words['de'];
+  for(let i=0; i < count; i++) currentText += pool[Math.floor(Math.random()*pool.length)] + " ";
+  currentText = currentText.trim();
+  idx = 0;
+  document.getElementById('input-trigger').value = "";
+  renderKeyboard();
+  renderDisplay();
+  updateHints();
+}
+
+function renderKeyboard() {
+  const kb = document.getElementById('kb'); kb.innerHTML = "";
+  layout.forEach(row => {
+    const rDiv = document.createElement('div'); rDiv.className = "row";
+    row.forEach(k => {
+      const kd = document.createElement('div'); kd.className = "key";
+      kd.id = `k-${k}`; kd.innerText = k; rDiv.appendChild(kd);
+    });
+    kb.appendChild(rDiv);
+  });
+  kb.innerHTML += `<div class="row"><div class="key" id="k- " style="width:180px">LEERTASTE</div></div>`;
+}
+
+function renderDisplay() {
+  const d = document.getElementById('display');
+  d.innerHTML = currentText.split('').map((c, i) => `<span class="char ${i===0?'current':''}" id="char-${idx+i}">${c}</span>`).join('');
+}
+
+function updateHints() {
+  const char = currentText[idx]?.toUpperCase() || "";
+  const hint = fingerInfo[char] || "Taste drücken";
+  const color = fingerColorMap[hint] || "#333";
+  const hintDiv = document.getElementById('finger-hint');
+  
+  if (currentMode === 'learn') {
+    hintDiv.style.display = "flex";
+    hintDiv.innerHTML = `<span class="finger-dot" style="background:${color}"></span> Finger: <strong>${hint}</strong>`;
+  } else {
+    hintDiv.innerHTML = `<span class="finger-dot" style="background:#2ecc71"></span> Viel Erfolg!`;
+  }
+
+  document.querySelectorAll('.key').forEach(k => k.classList.remove('active'));
+  const keyEl = document.getElementById(`k-${char === ' ' ? ' ' : char}`);
+  if(keyEl) keyEl.classList.add('active');
+}
+
+document.getElementById('input-trigger').addEventListener('input', (e) => {
+  const val = e.target.value;
+  const chars = document.querySelectorAll('.char');
+  if (currentMode === 'learn') {
+    if (val[idx] === currentText[idx]) {
+      chars[idx].classList.add('correct');
+      idx++;
+    } else {
+      chars[idx].classList.add('incorrect');
+      setTimeout(() => chars[idx-0].classList.remove('incorrect'), 200);
+      e.target.value = val.substring(0, idx);
+    }
+  } else {
+    if (val.length > idx) {
+      chars[idx].classList.add(val[idx] === currentText[idx] ? 'correct' : 'incorrect');
+      idx++;
+    }
+  }
+
+  if (idx < currentText.length) {
+    chars.forEach(c => c.classList.remove('current'));
+    chars[idx].classList.add('current');
+    chars[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    updateHints();
+    document.getElementById('stats').innerText = `Fortschritt: ${Math.floor((idx/currentText.length)*100)}% (${idx}/${currentText.length})`;
+  } else {
+    alert("Fertig!");
+    initGame();
+  }
+});
+initGame();
+</script>
+</body>
+</html>
